@@ -17,7 +17,8 @@
 		callback: null,
 		link: null,
 		minLength: 0,
-		transition: 'fade'
+		transition: 'fade',
+		matchStart: true
 	},
 	buildItems = function($this, data, settings) {
 		var str = [];
@@ -70,13 +71,19 @@
 				// are we looking at a source array or remote data?
 				if ($.isArray(settings.source)) {
 					data = settings.source.sort().filter(function(element) {
-						var element_text, re = new RegExp('^' + text, 'i');
+						var element_text;
 						if ($.isPlainObject(element)) {
 							element_text = element.label;
 						} else {
 							element_text = element;
 						}
-						return re.test(element_text);
+						if (settings.matchStart) {
+							var re = new RegExp('^' + text, 'i');
+							return re.test(element_text);
+						}
+						else {
+							return element_text.toUpperCase().indexOf(text.toUpperCase()) >= 0;
+						}
 					});
 					buildItems($this, data, settings);
 				} else {
