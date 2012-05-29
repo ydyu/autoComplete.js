@@ -18,7 +18,8 @@
 		link: null,
 		minLength: 0,
 		transition: 'fade',
-		matchStart: true
+		matchStart: true,
+		limit: -1
 	},
 	buildItems = function($this, data, settings) {
 		var str = [];
@@ -85,6 +86,7 @@
 							return element_text.toUpperCase().indexOf(text.toUpperCase()) >= 0;
 						}
 					});
+					if (settings.limit > 0 && data.length > settings.limit) data.length = settings.limit;
 					buildItems($this, data, settings);
 				} else {
 					$.get(settings.source, { term: text }, function(data) {
