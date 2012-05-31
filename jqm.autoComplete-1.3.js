@@ -19,8 +19,10 @@
 		minLength: 0,
 		transition: 'fade',
 		matchStart: true,
-		limit: -1
+		limit: -1,
+    delay: 0
 	},
+  keyTimeout_ = 'hello',
 	buildItems = function($this, data, settings) {
 		var str = [];
 		$.each(data, function(index, value) {
@@ -63,12 +65,29 @@
 	handleInput = function(e) {
 		var $this = $(this), text, data, settings = $this.jqmData("autocomplete");
 		if (settings) {
+      // clear any pending timeout
+      if(keyTimeout_) clearTimeout(keyTimeout_)
 			// get the current text of the input field
 			text = $this.val();
 			// if we don't have enough text zero out the target
 			if (text.length < settings.minLength) {
 				clearTarget($this, $(settings.target));
 			} else {
+        keyTimeout_ = setTimeout(function() {
+          methods['activateNow'].apply($this);
+        }, settings.delay);
+			}
+		}
+	},
+	methods = {
+		init: function(options) {
+			this.jqmData("autocomplete", $.extend({}, defaults, options));
+			return this.unbind("input.autocomplete").bind("input.autocomplete", handleInput);
+		},
+    activateNow: function() {
+		  var text, data, settings = this.jqmData("autocomplete");
+      if(settings) {
+        text = this.val();
 				// are we looking at a source array or remote data?
 				if ($.isArray(settings.source)) {
 					data = settings.source.sort().filter(function(element) {
@@ -87,20 +106,14 @@
 						}
 					});
 					if (settings.limit > 0 && data.length > settings.limit) data.length = settings.limit;
-					buildItems($this, data, settings);
+					buildItems(this, data, settings);
 				} else {
 					$.get(settings.source, { term: text }, function(data) {
-						buildItems($this, data, settings);
+						buildItems(this, data, settings);
 					},"json");
 				}
-			}
-		}
-	},
-	methods = {
-		init: function(options) {
-			this.jqmData("autocomplete", $.extend({}, defaults, options));
-			return this.unbind("input.autocomplete").bind("input.autocomplete", handleInput);
-		},
+      }
+    },
 		// Allow dynamic update of source and link
 		update: function(options) {
 			var settings = this.jqmData("autocomplete");
