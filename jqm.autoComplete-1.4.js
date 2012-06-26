@@ -1,17 +1,20 @@
 /*
 	Name: autoComplete
 	Author: Raymond Camden & Andy Matthews
-	Contributors: Jim Pease (@jmpease)
+	Contributors: Jim Pease (@jmpease), Yindong Yu
 	Website: http://raymondcamden.com/
-			http://andyMatthews.net
+			 http://andyMatthews.net
 	Packed With: http://jsutility.pjoneil.net/
-	Version: 1.3
+	Version: 1.4
  */
 (function($) {
 
-	"use strict";
+ 	"use strict";
 
 	var defaults = {
+		method: 'GET',
+		icon: 'arrow-r',
+		cancelRequests: false,
 		target: $(),
 		source: null,
 		callback: null,
@@ -20,24 +23,22 @@
 		transition: 'fade',
 		matchStart: true,
 		limit: -1,
-    delay: 0
+		delay: 0
 	},
-  keyTimeout_ = 'hello',
+	openXHR = {},
+	keyTimeout_ = null,
 	buildItems = function($this, data, settings) {
 		var str = [];
-		$.each(data, function(index, value) {
-			var urlParam, text;
-			// are we working with objects or strings?
-			if ($.isPlainObject(value)) {
-				urlParam = encodeURIComponent(value.value);
-				text = value.label;
-			} else {
-				urlParam = encodeURIComponent(value);
-				text = value;
-			}
-			urlParam = urlParam.replace('\'', '%27').replace('(', '%28').replace(')', '%29');
-			str.push('<li><a href="' + settings.link + urlParam + '" data-transition="' + settings.transition + '">' + text + '</a></li>');
-		});
+		if (data) {
+			$.each(data, function(index, value) {
+				// are we working with objects or strings?
+				if ($.isPlainObject(value)) {
+					str.push('<li data-icon=' + settings.icon + '><a href="' + settings.link + encodeURIComponent(value.value) + '" data-transition="' + settings.transition + '">' + value.label + '</a></li>');
+				} else {
+					str.push('<li data-icon=' + settings.icon + '><a href="' + settings.link + encodeURIComponent(value) + '" data-transition="' + settings.transition + '">' + value + '</a></li>');
+				}
+			});
+		}
 		$(settings.target).html(str.join('')).listview("refresh");
 
 		// is there a callback?
@@ -59,35 +60,35 @@
 		});
 	},
 	clearTarget = function($this, $target) {
-		$target.html('').listview('refresh');
+		$target.html('').listview('refresh').closest("fieldset").removeClass("ui-search-active");
 		$this.trigger("targetCleared.autocomplete");
 	},
 	handleInput = function(e) {
-		var $this = $(this), text, data, settings = $this.jqmData("autocomplete");
+		var $this = $(this), id = $this.attr("id"), text, data, settings = $this.jqmData("autocomplete");
 		if (settings) {
-      // clear any pending timeout
-      if(keyTimeout_) clearTimeout(keyTimeout_)
+			// clear any pending timeout
+			if(keyTimeout_) clearTimeout(keyTimeout_);
 			// get the current text of the input field
 			text = $this.val();
 			// if we don't have enough text zero out the target
 			if (text.length < settings.minLength) {
 				clearTarget($this, $(settings.target));
 			} else {
-        keyTimeout_ = setTimeout(function() {
-          methods['activateNow'].apply($this);
-        }, settings.delay);
+				keyTimeout_ = setTimeout(function() {
+					methods['activateNow'].apply($this);
+				}, settings.delay);
 			}
 		}
 	},
 	methods = {
 		init: function(options) {
 			this.jqmData("autocomplete", $.extend({}, defaults, options));
-			return this.unbind("input.autocomplete").bind("input.autocomplete", handleInput);
+			return this.unbind("keyup.autocomplete").bind("keyup.autocomplete", handleInput);
 		},
-    activateNow: function() {
-		  var text, data, settings = this.jqmData("autocomplete");
-      if(settings) {
-        text = this.val();
+		activateNow: function() {
+			var text, data, settings = this.jqmData("autocomplete");
+			if(settings) {
+				text = this.val();
 				// are we looking at a source array or remote data?
 				if ($.isArray(settings.source)) {
 					data = settings.source.sort().filter(function(element) {
@@ -107,13 +108,47 @@
 					});
 					if (settings.limit > 0 && data.length > settings.limit) data.length = settings.limit;
 					buildItems(this, data, settings);
+				} 
+				// Accept a function as source.
+				// Function needs to call the callback, which is the first parameter.
+				// source:function(text,callback) { mydata = [1,2]; callback(mydata); }
+				else if (typeof settings.source === 'function') {
+					settings.source(text,function(data){
+						buildItems(this, data, settings);	
+					});
 				} else {
-					$.get(settings.source, { term: text }, function(data) {
-						buildItems(this, data, settings);
-					},"json");
+					$.ajax({
+						type: settings.method,
+						url: settings.source,
+						data: { term: text },
+						beforeSend: function(jqXHR) {
+							if (settings.cancelRequests) {
+								if (openXHR[id]) {
+									// If we have an open XML HTTP Request for this autoComplete ID, abort it
+									openXHR[id].abort();
+								} else {
+									// Set a loading indicator as a temporary stop-gap to the response time issue
+									settings.target.html('<li data-icon="none"><a href="#">Searching...</a></li>').listview('refresh');
+									settings.target.closest("fieldset").addClass("ui-search-active");
+								}
+								// Set this request to the open XML HTTP Request list for this ID
+								openXHR[id] = jqXHR;
+							}
+						},
+						success: function(data) {
+							buildItems(this, data, settings);
+						},
+						complete: function (jqXHR, textStatus) {
+							// Clear this ID's open XML HTTP Request from the list
+							if (settings.cancelRequests) {
+								openXHR[id] = null;
+							}
+						},
+						dataType: 'json'
+					});
 				}
-      }
-    },
+			}
+		},
 		// Allow dynamic update of source and link
 		update: function(options) {
 			var settings = this.jqmData("autocomplete");
